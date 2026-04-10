@@ -2093,7 +2093,7 @@ def render_qualidade(df_base: pd.DataFrame, df_receitas: pd.DataFrame, df_merged
         jitter=0.3,
     ))
     fig_box = default_layout(fig_box, height=350, showlegend=False)
-    fig_box.update_layout(yaxis_title=lbl(is_media, 'eixo'), yaxis_tickprefix="R$ ")
+    fig_box.update_layout(yaxis_title="Receita (R$)", yaxis_tickprefix="R$ ")
     render_chart(fig_box)
 
     st.markdown(
