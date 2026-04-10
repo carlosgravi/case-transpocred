@@ -2174,7 +2174,7 @@ def render_qualidade(df_base: pd.DataFrame, df_receitas: pd.DataFrame, df_merged
 
     for item, status, detalhe in normalizacoes:
         st.markdown(
-            f'<div style="padding:6px 0;border-bottom:1px solid #E0E0E0;">'
+            f'<div style="padding:6px 0;border-bottom:1px solid #E0E0E0;color:#1A1A1A;">'
             f'<b>{item}</b> — <span style="color:#007D89">{status}</span>'
             f'<br><span style="font-size:0.88rem;color:#575757">{detalhe}</span>'
             f'</div>',
@@ -2201,10 +2201,11 @@ def render_qualidade(df_base: pd.DataFrame, df_receitas: pd.DataFrame, df_merged
 
     for label, ok, detail in scores_list:
         icon = "\u2705" if ok else "\u26a0\ufe0f"
+        cor = "#09AF41" if ok else "#FFA300"
         st.markdown(
-            f'<div style="display:flex;align-items:center;gap:8px;padding:6px 0;">'
+            f'<div style="display:flex;align-items:center;gap:8px;padding:6px 0;color:#1A1A1A;">'
             f'<span style="font-size:1.1rem">{icon}</span>'
-            f'<b>{label}</b>: {detail}'
+            f'<span><b>{label}</b>: <span style="color:{cor}">{detail}</span></span>'
             f'</div>',
             unsafe_allow_html=True,
         )
@@ -2214,7 +2215,7 @@ def render_qualidade(df_base: pd.DataFrame, df_receitas: pd.DataFrame, df_merged
     st.markdown(
         f'<div class="success-box" style="text-align:center;padding:20px;">'
         f'<div style="font-size:2rem;font-weight:700;color:{cor_nota}">{nota:.1f}/10</div>'
-        f'<div style="font-size:1rem;color:#1A1A1A">'
+        f'<div style="font-size:1rem;color:#1A1A1A !important;">'
         f'<b>{aprovados}/{total_checks}</b> verificações aprovadas — '
         f'Base de dados com alta confiabilidade para análise</div>'
         f'</div>',
