@@ -128,23 +128,36 @@ def fmt_delta_brl(valor: float) -> str:
 def inject_css():
     st.markdown("""
     <style>
-        /* Metricas */
+        /* Métricas: nunca truncar valores */
         [data-testid="stMetric"] {
             background: linear-gradient(135deg, #F5F7FA 0%, #ECEFF1 100%);
             border-radius: 12px;
             padding: 16px 20px;
             border-left: 4px solid #007D89;
             box-shadow: 0 2px 4px rgba(0,0,0,0.06);
+            overflow: visible !important;
+            min-width: 0 !important;
         }
         [data-testid="stMetricLabel"] {
             font-size: 0.85rem !important;
             color: #575757 !important;
             font-weight: 500 !important;
+            overflow: visible !important;
+            text-overflow: unset !important;
+            white-space: normal !important;
         }
         [data-testid="stMetricValue"] {
-            font-size: 1.6rem !important;
+            font-size: 1.5rem !important;
             color: #165C7D !important;
             font-weight: 700 !important;
+            overflow: visible !important;
+            text-overflow: unset !important;
+            white-space: nowrap !important;
+        }
+        /* Impedir truncamento em qualquer filho do metric */
+        [data-testid="stMetric"] * {
+            overflow: visible !important;
+            text-overflow: unset !important;
         }
 
         /* Cards de insight */
@@ -318,26 +331,65 @@ def inject_css():
          * RESPONSIVIDADE
          * ============================================================ */
 
-        /* Container principal: padding adaptável */
+        /* Container principal */
         .main .block-container {
             max-width: 1200px;
             padding: 1rem 2rem !important;
         }
 
-        /* Métricas: adaptar tamanho em telas menores */
+        /* Gráficos Plotly: sempre 100% */
+        .stPlotlyChart, .js-plotly-plot, .plotly {
+            width: 100% !important;
+        }
+
+        /* DataFrames: scroll horizontal */
+        [data-testid="stDataFrame"] {
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+        }
+
+        /* Expanders */
+        [data-testid="stExpander"] {
+            border: 1px solid #E0E0E0;
+            border-radius: 8px;
+            margin: 8px 0;
+        }
+
+        /* Scrollbar estilizada */
+        ::-webkit-scrollbar { height: 6px; width: 6px; }
+        ::-webkit-scrollbar-track { background: #F0F4F8; border-radius: 3px; }
+        ::-webkit-scrollbar-thumb { background: #007D89; border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: #005F68; }
+
+        /* ------ MOBILE (< 768px) ------ */
         @media (max-width: 768px) {
+            .main .block-container {
+                padding: 0.5rem 0.75rem !important;
+            }
+
+            /* KPIs: empilhar (cada coluna 100%) */
+            [data-testid="stHorizontalBlock"] {
+                flex-wrap: wrap !important;
+                gap: 0.4rem !important;
+            }
+            [data-testid="stHorizontalBlock"] > [data-testid="stColumn"] {
+                flex: 1 1 45% !important;
+                min-width: 45% !important;
+            }
+
+            /* Métricas menores */
             [data-testid="stMetric"] {
-                padding: 10px 12px;
+                padding: 8px 10px;
                 border-left-width: 3px;
             }
             [data-testid="stMetricLabel"] {
-                font-size: 0.75rem !important;
+                font-size: 0.7rem !important;
             }
             [data-testid="stMetricValue"] {
-                font-size: 1.2rem !important;
+                font-size: 1rem !important;
             }
 
-            /* Tabs: scroll horizontal em mobile */
+            /* Tabs: scroll horizontal */
             .stTabs [data-baseweb="tab-list"] {
                 overflow-x: auto;
                 flex-wrap: nowrap;
@@ -346,107 +398,53 @@ def inject_css():
                 gap: 2px;
             }
             .stTabs [data-baseweb="tab"] {
-                padding: 8px 12px;
-                font-size: 0.8rem;
+                padding: 7px 10px;
+                font-size: 0.75rem;
                 white-space: nowrap;
                 flex-shrink: 0;
             }
 
-            /* Cards: padding menor */
+            /* Cards menores */
             .insight-box, .alert-box, .danger-box, .success-box {
-                padding: 10px 12px;
-                font-size: 0.85rem;
+                padding: 8px 10px;
+                font-size: 0.82rem;
             }
 
-            /* Header título menor */
-            section[data-testid="stMain"] h1 {
-                font-size: 1.4rem !important;
-            }
-            section[data-testid="stMain"] h3 {
-                font-size: 1rem !important;
-            }
+            /* Títulos menores */
+            section[data-testid="stMain"] h1 { font-size: 1.3rem !important; }
+            section[data-testid="stMain"] h3 { font-size: 1rem !important; }
 
-            /* Container sem padding excessivo */
-            .main .block-container {
-                padding: 0.5rem 1rem !important;
-            }
+            /* Sidebar */
+            [data-testid="stSidebar"] { min-width: 240px !important; }
         }
 
-        /* Tablets */
+        /* ------ TABLET (769px - 1024px) ------ */
         @media (min-width: 769px) and (max-width: 1024px) {
             .main .block-container {
                 padding: 1rem 1.5rem !important;
             }
             [data-testid="stMetricValue"] {
-                font-size: 1.4rem !important;
+                font-size: 1.3rem !important;
             }
             .stTabs [data-baseweb="tab"] {
-                padding: 9px 14px;
+                padding: 8px 14px;
                 font-size: 0.85rem;
             }
         }
 
-        /* Telas grandes (wide) */
+        /* ------ ZOOM 125-150% (viewport < 1100px com sidebar aberto) ------ */
+        @media (max-width: 1100px) and (min-width: 769px) {
+            [data-testid="stMetricValue"] {
+                font-size: 1.2rem !important;
+            }
+            [data-testid="stMetricLabel"] {
+                font-size: 0.78rem !important;
+            }
+        }
+
+        /* ------ TELAS GRANDES ------ */
         @media (min-width: 1400px) {
-            .main .block-container {
-                max-width: 1400px;
-            }
-        }
-
-        /* Gráficos Plotly: responsivos */
-        .stPlotlyChart {
-            width: 100% !important;
-        }
-        .js-plotly-plot, .plotly {
-            width: 100% !important;
-        }
-
-        /* DataFrames: scroll horizontal suave */
-        [data-testid="stDataFrame"] {
-            overflow-x: auto;
-            -webkit-overflow-scrolling: touch;
-        }
-
-        /* Expanders: melhor espaçamento */
-        [data-testid="stExpander"] {
-            border: 1px solid #E0E0E0;
-            border-radius: 8px;
-            margin: 8px 0;
-        }
-
-        /* Colunas Streamlit: gap menor em mobile */
-        @media (max-width: 768px) {
-            [data-testid="stHorizontalBlock"] {
-                gap: 0.5rem !important;
-            }
-            /* Forçar colunas empilhadas em mobile quando muito estreitas */
-            [data-testid="stHorizontalBlock"] > [data-testid="stColumn"] {
-                min-width: 0;
-            }
-        }
-
-        /* Scrollbar estilizada */
-        ::-webkit-scrollbar {
-            height: 6px;
-            width: 6px;
-        }
-        ::-webkit-scrollbar-track {
-            background: #F0F4F8;
-            border-radius: 3px;
-        }
-        ::-webkit-scrollbar-thumb {
-            background: #007D89;
-            border-radius: 3px;
-        }
-        ::-webkit-scrollbar-thumb:hover {
-            background: #005F68;
-        }
-
-        /* Sidebar responsivo */
-        @media (max-width: 768px) {
-            [data-testid="stSidebar"] {
-                min-width: 250px !important;
-            }
+            .main .block-container { max-width: 1400px; }
         }
     </style>
     """, unsafe_allow_html=True)
@@ -780,10 +778,12 @@ def render_visao_geral(df: pd.DataFrame, df_receitas_raw: pd.DataFrame, filtros_
         if total_associados > 0 else 0
     )
 
-    c1, c2, c3, c4, c5, c6 = st.columns(6)
+    # KPIs em 2 linhas de 3 (melhor responsividade que 6 em linha)
+    c1, c2, c3 = st.columns(3)
     c1.metric("Total Associados", fmt_num(total_associados))
     c2.metric("Receita Total", fmt_brl(receita_total))
     c3.metric("Ticket Médio", fmt_brl(ticket_médio))
+    c4, c5, c6 = st.columns(3)
     c4.metric("PAs Ativas", fmt_num(total_pas))
     c5.metric("Produtos", fmt_num(total_produtos))
     c6.metric("% Perfil Triste", fmt_pct(pct_triste))
