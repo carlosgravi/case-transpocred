@@ -807,10 +807,13 @@ def render_visao_geral(df: pd.DataFrame, df_receitas_raw: pd.DataFrame, filtros_
         fig_evol.add_trace(go.Scatter(
             x=receita_mensal["dtbase"],
             y=receita_mensal["vlreceita"],
-            mode="lines+markers",
+            mode="lines+markers+text",
             name="Receita",
             line=dict(color=COLORS["primary"], width=3),
             marker=dict(size=10, color=COLORS["primary"]),
+            text=[fmt_brl(v) for v in receita_mensal["vlreceita"]],
+            textposition="top center",
+            textfont=dict(size=10, color="#1A1A1A"),
             hovertemplate="<b>%{x|%b/%Y}</b><br>Receita: R$ %{y:,.0f}<extra></extra>",
         ))
 
@@ -871,6 +874,9 @@ def render_visao_geral(df: pd.DataFrame, df_receitas_raw: pd.DataFrame, filtros_
             y=receita_prod["produto"],
             orientation="h",
             marker_color=colors_prod,
+            text=[fmt_brl(v) for v in receita_prod["vlreceita"]],
+            textposition="auto",
+            textfont=dict(size=10),
             hovertemplate="<b>%{y}</b><br>Receita: R$ %{x:,.0f}<extra></extra>",
         ))
         fig_prod = default_layout(fig_prod, height=400, showlegend=False)
@@ -1206,6 +1212,9 @@ def render_risco(df: pd.DataFrame):
             labels={"qtd": "Associados", "score": "", "perfil": "Perfil"},
         )
         fig_sp.update_traces(
+            texttemplate="%{y:,.0f}",
+            textposition="outside",
+            textfont=dict(size=9),
             hovertemplate="<b>%{x}</b><br>Perfil: %{data.name}<br>Associados: %{y:,.0f}<extra></extra>"
         )
         fig_sp = default_layout(fig_sp, height=420)
@@ -1366,6 +1375,7 @@ def render_pa(df: pd.DataFrame):
         pa_stats["bubble_size"] = (pa_stats["receita"] / max_receita * 40).clip(lower=5)
 
         fig_scatter.add_trace(go.Scatter(
+            textfont=dict(size=8, color="#1A1A1A"),
             x=pa_stats["associados"],
             y=pa_stats["ticket_pa"],
             mode="markers",
