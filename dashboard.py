@@ -703,6 +703,7 @@ def default_layout(fig, height=450, margin=None, showlegend=True):
         margin=margin,
         plot_bgcolor="#FFFFFF",
         paper_bgcolor="#FFFFFF",
+        separators=",.",  # pt-BR: vírgula decimal, ponto milhar
         font=dict(family="Inter, Segoe UI, Arial", size=12, color="#1A1A1A"),
         title=dict(text="", font=dict(size=14, color="#0D3B4F")),
         showlegend=showlegend,
@@ -1212,7 +1213,7 @@ def render_risco(df: pd.DataFrame):
             labels={"qtd": "Associados", "score": "", "perfil": "Perfil"},
         )
         fig_sp.update_traces(
-            texttemplate="%{y:,.0f}",
+            texttemplate="%{y:,}",
             textposition="outside",
             textfont=dict(size=9),
             hovertemplate="<b>%{x}</b><br>Perfil: %{data.name}<br>Associados: %{y:,.0f}<extra></extra>"
@@ -1796,21 +1797,17 @@ def render_dados_excluidos(df_receitas_raw: pd.DataFrame, df_base: pd.DataFrame)
         nl_prod = df_nao_loc.groupby("produto")["vlreceita"].agg(["count", "sum"]).reset_index()
         nl_prod.columns = ["Produto", "Registros", "Receita"]
         nl_prod = nl_prod.sort_values("Receita", ascending=False)
-        st.dataframe(nl_prod, use_container_width=True, hide_index=True,
-                     column_config={
-                         "Registros": st.column_config.NumberColumn(format="%d"),
-                         "Receita": st.column_config.NumberColumn(format="R$ %.2f"),
-                     })
+        nl_prod["Registros"] = nl_prod["Registros"].apply(fmt_num)
+        nl_prod["Receita"] = nl_prod["Receita"].apply(lambda x: fmt_brl(x, 2))
+        st.dataframe(nl_prod, use_container_width=True, hide_index=True)
 
     with col_nl2:
         st.markdown("**Distribuição por Mês**")
         nl_mes = df_nao_loc.groupby(df_nao_loc["dtbase"].dt.strftime("%Y-%m"))["vlreceita"].agg(["count", "sum"]).reset_index()
         nl_mes.columns = ["Mês", "Registros", "Receita"]
-        st.dataframe(nl_mes, use_container_width=True, hide_index=True,
-                     column_config={
-                         "Registros": st.column_config.NumberColumn(format="%d"),
-                         "Receita": st.column_config.NumberColumn(format="R$ %.2f"),
-                     })
+        nl_mes["Registros"] = nl_mes["Registros"].apply(fmt_num)
+        nl_mes["Receita"] = nl_mes["Receita"].apply(lambda x: fmt_brl(x, 2))
+        st.dataframe(nl_mes, use_container_width=True, hide_index=True)
 
     with st.expander("Ver amostra dos registros excluídos (primeiras 50 linhas)", expanded=False):
         _cols_show = [c for c in ["id_ident", "dtbase", "vlreceita", "produto", "perfil"] if c in df_nao_loc.columns]
@@ -1878,19 +1875,17 @@ def render_dados_excluidos(df_receitas_raw: pd.DataFrame, df_base: pd.DataFrame)
             st.markdown("**Top 10 associados com maior receita negativa**")
             neg_por_cliente = df_negativos.groupby("id_ident_num")["vlreceita"].sum().sort_values().head(10).reset_index()
             neg_por_cliente.columns = ["ID Associado", "Receita Negativa"]
-            st.dataframe(neg_por_cliente, use_container_width=True, hide_index=True,
-                         column_config={"Receita Negativa": st.column_config.NumberColumn(format="R$ %.2f")})
+            neg_por_cliente["Receita Negativa"] = neg_por_cliente["Receita Negativa"].apply(lambda x: fmt_brl(x, 2))
+            st.dataframe(neg_por_cliente, use_container_width=True, hide_index=True)
 
         with col_neg2:
             st.markdown("**Distribuição por Produto**")
             neg_prod = df_negativos.groupby("produto")["vlreceita"].agg(["count", "sum"]).reset_index()
             neg_prod.columns = ["Produto", "Registros", "Valor"]
             neg_prod = neg_prod.sort_values("Valor")
-            st.dataframe(neg_prod, use_container_width=True, hide_index=True,
-                         column_config={
-                             "Registros": st.column_config.NumberColumn(format="%d"),
-                             "Valor": st.column_config.NumberColumn(format="R$ %.2f"),
-                         })
+            neg_prod["Registros"] = neg_prod["Registros"].apply(fmt_num)
+            neg_prod["Valor"] = neg_prod["Valor"].apply(lambda x: fmt_brl(x, 2))
+            st.dataframe(neg_prod, use_container_width=True, hide_index=True)
 
     # === Resumo ===
     st.markdown("---")
