@@ -653,6 +653,18 @@ def render_sidebar(df_merged: pd.DataFrame):
         )
 
         st.markdown("---")
+
+        # Cenário de interpretação dos dados
+        st.markdown("### \U0001f4ca Cenário de Dados")
+        cenario = st.radio(
+            "Interpretar receita como:",
+            ["Valor Absoluto", "Receita Média (AVG)"],
+            index=0,
+            help="A coluna original chama-se AVG_vlreceita. "
+                 "Selecione como deseja interpretar os valores.",
+        )
+
+        st.markdown("---")
         st.markdown("### \U0001f4c5 Período dos Dados")
         if "dtbase" in df_merged.columns:
             dt_min = df_merged["dtbase"].min()
@@ -678,12 +690,25 @@ def render_sidebar(df_merged: pd.DataFrame):
         df = df[df["produto"].isin(produtos_selecionados)]
 
     filtros_ativos = bool(pa_selecionadas or score_selecionados or perfil_selecionado or produtos_selecionados)
-    return df, filtros_ativos
+    is_media = cenario == "Receita Média (AVG)"
+    return df, filtros_ativos, is_media
 
 
 # ---------------------------------------------------------------------------
 # Funcao auxiliar para layout de gráficos
 # ---------------------------------------------------------------------------
+# Labels dinâmicos conforme cenário
+def lbl(is_media: bool, tipo: str = "receita") -> str:
+    """Retorna label adequado ao cenário selecionado."""
+    labels = {
+        "receita": "Receita Média" if is_media else "Receita",
+        "receita_total": "Receita Média Acumulada" if is_media else "Receita Total",
+        "ticket": "Ticket Médio (sobre média)" if is_media else "Ticket Médio",
+        "eixo": "Receita Média (R$)" if is_media else "Receita (R$)",
+    }
+    return labels.get(tipo, tipo)
+
+
 def default_layout(fig, height=450, margin=None, showlegend=True):
     """Aplica layout padrão aos gráficos Plotly."""
     if margin is None:
@@ -767,7 +792,7 @@ def render_chart(fig, **kwargs):
 # ---------------------------------------------------------------------------
 # Tab 1 - Visão Geral
 # ---------------------------------------------------------------------------
-def render_visao_geral(df: pd.DataFrame, df_receitas_raw: pd.DataFrame, filtros_ativos: bool):
+def render_visao_geral(df: pd.DataFrame, df_receitas_raw: pd.DataFrame, filtros_ativos: bool, is_media: bool = False):
     """Renderiza a aba Visão Geral."""
 
     st.markdown("### \U0001f4c8 Visão Geral da Cooperativa")
@@ -789,8 +814,8 @@ def render_visao_geral(df: pd.DataFrame, df_receitas_raw: pd.DataFrame, filtros_
     # KPIs em 2 linhas de 3 (melhor responsividade que 6 em linha)
     c1, c2, c3 = st.columns(3)
     c1.metric("Total Associados", fmt_num(total_associados))
-    c2.metric("Receita Total", fmt_brl(receita_total))
-    c3.metric("Ticket Médio", fmt_brl(ticket_médio))
+    c2.metric(lbl(is_media, 'receita_total'), fmt_brl(receita_total))
+    c3.metric(lbl(is_media, 'ticket'), fmt_brl(ticket_médio))
     c4, c5, c6 = st.columns(3)
     c4.metric("PAs Ativas", fmt_num(total_pas))
     c5.metric("Produtos", fmt_num(total_produtos))
@@ -802,7 +827,7 @@ def render_visao_geral(df: pd.DataFrame, df_receitas_raw: pd.DataFrame, filtros_
     col_left, col_right = st.columns([3, 2])
 
     with col_left:
-        chart_header("Evolução da Receita Mensal", "Mostra a receita total mês a mês. A linha tracejada indica a tendência. Queda no último mês pode sinalizar sazonalidade ou perda de clientes-chave.")
+        chart_header(f"Evolução da {lbl(is_media, 'receita')} Mensal", "Mostra a receita total mês a mês. A linha tracejada indica a tendência. Queda no último mês pode sinalizar sazonalidade ou perda de clientes-chave.")
         receita_mensal = (
             df.groupby(df["dtbase"].dt.to_period("M"))["vlreceita"]
             .sum()
@@ -841,7 +866,7 @@ def render_visao_geral(df: pd.DataFrame, df_receitas_raw: pd.DataFrame, filtros_
 
         fig_evol = default_layout(fig_evol, height=400)
         fig_evol.update_layout(
-            yaxis_title="Receita (R$)",
+            yaxis_title=lbl(is_media, 'eixo'),
             xaxis_title=None,
             yaxis_tickformat=",.0f",
             yaxis_tickprefix="R$ ",
@@ -864,7 +889,7 @@ def render_visao_geral(df: pd.DataFrame, df_receitas_raw: pd.DataFrame, filtros_
                 )
 
     with col_right:
-        chart_header("Receita por Produto", "Barras ordenadas pela receita total de cada produto. Observe a concentração: se um produto domina, há risco de dependência. Produtos menores são oportunidades de cross-sell.")
+        chart_header(f"{lbl(is_media, 'receita')} por Produto", "Barras ordenadas pela receita total de cada produto. Observe a concentração: se um produto domina, há risco de dependência. Produtos menores são oportunidades de cross-sell.")
         receita_prod = (
             df.groupby("produto")["vlreceita"]
             .sum()
@@ -889,7 +914,7 @@ def render_visao_geral(df: pd.DataFrame, df_receitas_raw: pd.DataFrame, filtros_
         ))
         fig_prod = default_layout(fig_prod, height=400, showlegend=False)
         fig_prod.update_layout(
-            xaxis_title="Receita (R$)",
+            xaxis_title=lbl(is_media, 'eixo'),
             yaxis_title=None,
             xaxis_tickformat=",.0f",
             xaxis_tickprefix="R$ ",
@@ -925,7 +950,7 @@ def render_visao_geral(df: pd.DataFrame, df_receitas_raw: pd.DataFrame, filtros_
         render_chart(fig_score, use_container_width=True)
 
     with col_perfil:
-        chart_header("Receita por Perfil", "Compara receita gerada por associados Alegre vs Triste. Se Triste gera mais receita, os clientes mais valiosos estão insatisfeitos — risco crítico de evasão.")
+        chart_header(f"{lbl(is_media, 'receita')} por Perfil", "Compara receita gerada por associados Alegre vs Triste. Se Triste gera mais receita, os clientes mais valiosos estão insatisfeitos — risco crítico de evasão.")
         perfil_receita = (
             df.groupby("perfil")["vlreceita"]
             .sum()
@@ -943,7 +968,7 @@ def render_visao_geral(df: pd.DataFrame, df_receitas_raw: pd.DataFrame, filtros_
         ))
         fig_perfil = default_layout(fig_perfil, height=400, showlegend=False)
         fig_perfil.update_layout(
-            yaxis_title="Receita (R$)",
+            yaxis_title=lbl(is_media, 'eixo'),
             xaxis_title=None,
             yaxis_tickformat=",.0f",
             yaxis_tickprefix="R$ ",
@@ -978,7 +1003,7 @@ def render_visao_geral(df: pd.DataFrame, df_receitas_raw: pd.DataFrame, filtros_
 # ---------------------------------------------------------------------------
 # Tab 2 - Concentração de Receita
 # ---------------------------------------------------------------------------
-def render_concentração(df: pd.DataFrame):
+def render_concentração(df: pd.DataFrame, is_media: bool = False):
     """Renderiza a aba Concentração de Receita."""
 
     st.markdown("### \U0001f4b0 Concentração de Receita")
@@ -1118,7 +1143,7 @@ def render_concentração(df: pd.DataFrame):
         ))
         fig_quintil = default_layout(fig_quintil, height=450, showlegend=False)
         fig_quintil.update_layout(
-            yaxis_title="Receita (R$)",
+            yaxis_title=lbl(is_media, 'eixo'),
             xaxis_title=None,
             yaxis_tickformat=",.0f",
             yaxis_tickprefix="R$ ",
@@ -1143,7 +1168,7 @@ def render_concentração(df: pd.DataFrame):
 # ---------------------------------------------------------------------------
 # Tab 3 - Análise de Risco
 # ---------------------------------------------------------------------------
-def render_risco(df: pd.DataFrame):
+def render_risco(df: pd.DataFrame, is_media: bool = False):
     """Renderiza a aba Análise de Risco."""
 
     st.markdown("### \U0001f6e1 Análise de Risco")
@@ -1318,7 +1343,7 @@ def render_risco(df: pd.DataFrame):
 # ---------------------------------------------------------------------------
 # Tab 4 - Análise por PA
 # ---------------------------------------------------------------------------
-def render_pa(df: pd.DataFrame):
+def render_pa(df: pd.DataFrame, is_media: bool = False):
     """Renderiza a aba Análise por PA."""
 
     st.markdown("### \U0001f3e6 Análise por PA / Agência")
@@ -1366,7 +1391,7 @@ def render_pa(df: pd.DataFrame):
         ))
         fig_pa = default_layout(fig_pa, height=500, showlegend=False)
         fig_pa.update_layout(
-            xaxis_title="Receita (R$)",
+            xaxis_title=lbl(is_media, 'eixo'),
             yaxis_title=None,
             xaxis_tickformat=",.0f",
             xaxis_tickprefix="R$ ",
@@ -1493,7 +1518,7 @@ def render_pa(df: pd.DataFrame):
 # ---------------------------------------------------------------------------
 # Tab 5 - Oportunidades & Alertas
 # ---------------------------------------------------------------------------
-def render_oportunidades(df: pd.DataFrame, df_receitas_raw: pd.DataFrame):
+def render_oportunidades(df: pd.DataFrame, df_receitas_raw: pd.DataFrame, is_media: bool = False):
     """Renderiza a aba Oportunidades & Alertas."""
 
     st.markdown("### \U0001f3af Oportunidades e Alertas Estratégicos")
@@ -2068,7 +2093,7 @@ def render_qualidade(df_base: pd.DataFrame, df_receitas: pd.DataFrame, df_merged
         jitter=0.3,
     ))
     fig_box = default_layout(fig_box, height=350, showlegend=False)
-    fig_box.update_layout(yaxis_title="Receita (R$)", yaxis_tickprefix="R$ ")
+    fig_box.update_layout(yaxis_title=lbl(is_media, 'eixo'), yaxis_tickprefix="R$ ")
     render_chart(fig_box)
 
     st.markdown(
@@ -2221,11 +2246,19 @@ def main():
     df_base, df_receitas, df_merged = load_data()
 
     # Filtros
-    df_filtered, filtros_ativos = render_sidebar(df_merged)
+    df_filtered, filtros_ativos, is_media = render_sidebar(df_merged)
 
     if len(df_filtered) == 0:
         st.warning("Nenhum dado encontrado para os filtros selecionados. Ajuste os filtros no menu lateral.")
         return
+
+    # Banner do cenário ativo
+    if is_media:
+        st.info(
+            "\U0001f4ca **Cenário: Receita Média (AVG)** — Os valores exibidos representam a "
+            "**média de receita** por registro (campo original `AVG_vlreceita`). "
+            "Totalizações representam soma de médias, não valores absolutos."
+        )
 
     # Tabs
     tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
@@ -2239,19 +2272,19 @@ def main():
     ])
 
     with tab1:
-        render_visao_geral(df_filtered, df_receitas, filtros_ativos)
+        render_visao_geral(df_filtered, df_receitas, filtros_ativos, is_media)
 
     with tab2:
-        render_concentração(df_filtered)
+        render_concentração(df_filtered, is_media)
 
     with tab3:
-        render_risco(df_filtered)
+        render_risco(df_filtered, is_media)
 
     with tab4:
-        render_pa(df_filtered)
+        render_pa(df_filtered, is_media)
 
     with tab5:
-        render_oportunidades(df_filtered, df_receitas)
+        render_oportunidades(df_filtered, df_receitas, is_media)
 
     with tab6:
         render_dados_excluidos(df_receitas, df_base)
