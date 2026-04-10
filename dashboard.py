@@ -367,78 +367,68 @@ def inject_css():
                 padding: 0.5rem 0.75rem !important;
             }
 
-            /* KPIs: empilhar (cada coluna 100%) */
+            /* Colunas: empilhar em grid 2 colunas */
             [data-testid="stHorizontalBlock"] {
                 flex-wrap: wrap !important;
                 gap: 0.4rem !important;
             }
             [data-testid="stHorizontalBlock"] > [data-testid="stColumn"] {
-                flex: 1 1 45% !important;
-                min-width: 45% !important;
+                flex: 1 1 100% !important;
+                min-width: 100% !important;
             }
 
-            /* Métricas menores */
-            [data-testid="stMetric"] {
-                padding: 8px 10px;
-                border-left-width: 3px;
-            }
-            [data-testid="stMetricLabel"] {
-                font-size: 0.7rem !important;
-            }
-            [data-testid="stMetricValue"] {
-                font-size: 1rem !important;
-            }
+            /* KPIs */
+            [data-testid="stMetric"] { padding: 8px 10px; border-left-width: 3px; }
+            [data-testid="stMetricLabel"] { font-size: 0.7rem !important; }
+            [data-testid="stMetricValue"] { font-size: 1rem !important; }
 
-            /* Tabs: scroll horizontal */
+            /* Tabs */
             .stTabs [data-baseweb="tab-list"] {
-                overflow-x: auto;
-                flex-wrap: nowrap;
-                -webkit-overflow-scrolling: touch;
-                padding: 2px;
-                gap: 2px;
+                overflow-x: auto; flex-wrap: nowrap;
+                -webkit-overflow-scrolling: touch; padding: 2px; gap: 2px;
             }
             .stTabs [data-baseweb="tab"] {
-                padding: 7px 10px;
-                font-size: 0.75rem;
-                white-space: nowrap;
-                flex-shrink: 0;
+                padding: 7px 10px; font-size: 0.75rem;
+                white-space: nowrap; flex-shrink: 0;
             }
 
-            /* Cards menores */
+            /* Cards e texto */
             .insight-box, .alert-box, .danger-box, .success-box {
-                padding: 8px 10px;
-                font-size: 0.82rem;
+                padding: 8px 10px; font-size: 0.82rem;
             }
-
-            /* Títulos menores */
             section[data-testid="stMain"] h1 { font-size: 1.3rem !important; }
             section[data-testid="stMain"] h3 { font-size: 1rem !important; }
+
+            /* Chart headers */
+            .chart-tooltip { width: 16px !important; height: 16px !important; font-size: 0.6rem !important; }
 
             /* Sidebar */
             [data-testid="stSidebar"] { min-width: 240px !important; }
         }
 
-        /* ------ TABLET (769px - 1024px) ------ */
-        @media (min-width: 769px) and (max-width: 1024px) {
-            .main .block-container {
-                padding: 1rem 1.5rem !important;
+        /* ------ TABLET / ZOOM 125% (769px - 1100px) ------ */
+        @media (min-width: 769px) and (max-width: 1100px) {
+            .main .block-container { padding: 1rem 1.5rem !important; }
+
+            [data-testid="stMetricValue"] { font-size: 1.2rem !important; }
+            [data-testid="stMetricLabel"] { font-size: 0.78rem !important; }
+
+            .stTabs [data-baseweb="tab"] { padding: 8px 12px; font-size: 0.82rem; }
+
+            /* Gráficos lado a lado: empilhar quando apertado */
+            [data-testid="stHorizontalBlock"] {
+                flex-wrap: wrap !important;
             }
-            [data-testid="stMetricValue"] {
-                font-size: 1.3rem !important;
-            }
-            .stTabs [data-baseweb="tab"] {
-                padding: 8px 14px;
-                font-size: 0.85rem;
+            [data-testid="stHorizontalBlock"] > [data-testid="stColumn"] {
+                min-width: 48% !important;
             }
         }
 
-        /* ------ ZOOM 125-150% (viewport < 1100px com sidebar aberto) ------ */
-        @media (max-width: 1100px) and (min-width: 769px) {
-            [data-testid="stMetricValue"] {
-                font-size: 1.2rem !important;
-            }
-            [data-testid="stMetricLabel"] {
-                font-size: 0.78rem !important;
+        /* ------ ZOOM 150%+ (< 900px efetivo com sidebar) ------ */
+        @media (max-width: 900px) and (min-width: 769px) {
+            [data-testid="stHorizontalBlock"] > [data-testid="stColumn"] {
+                flex: 1 1 100% !important;
+                min-width: 100% !important;
             }
         }
 
@@ -697,32 +687,40 @@ def render_sidebar(df_merged: pd.DataFrame):
 def default_layout(fig, height=450, margin=None, showlegend=True):
     """Aplica layout padrão aos gráficos Plotly."""
     if margin is None:
-        margin = dict(l=40, r=40, t=50, b=40)
+        margin = dict(l=50, r=30, t=30, b=50)
     fig.update_layout(
         height=height,
         margin=margin,
+        autosize=True,
         plot_bgcolor="#FFFFFF",
         paper_bgcolor="#FFFFFF",
         separators=",.",  # pt-BR: vírgula decimal, ponto milhar
-        font=dict(family="Inter, Segoe UI, Arial", size=12, color="#1A1A1A"),
+        font=dict(family="Inter, Segoe UI, Arial", size=11, color="#1A1A1A"),
         title=dict(text="", font=dict(size=14, color="#0D3B4F")),
         showlegend=showlegend,
         legend=dict(
             bgcolor="rgba(255,255,255,0.95)",
             bordercolor="#E0E0E0",
             borderwidth=1,
-            font=dict(size=11, color="#1A1A1A"),
+            font=dict(size=10, color="#1A1A1A"),
+            orientation="h",
+            yanchor="bottom",
+            y=1.02,
+            xanchor="center",
+            x=0.5,
         ),
     )
     fig.update_xaxes(
         gridcolor="#F0F0F0", linecolor="#E0E0E0", linewidth=1,
-        title_font=dict(size=12, color="#1A1A1A"),
-        tickfont=dict(color="#333333"),
+        title_font=dict(size=11, color="#1A1A1A"),
+        tickfont=dict(size=10, color="#333333"),
+        automargin=True,
     )
     fig.update_yaxes(
         gridcolor="#F0F0F0", linecolor="#E0E0E0", linewidth=1,
-        title_font=dict(size=12, color="#1A1A1A"),
-        tickfont=dict(color="#333333"),
+        title_font=dict(size=11, color="#1A1A1A"),
+        tickfont=dict(size=10, color="#333333"),
+        automargin=True,
     )
     return fig
 
@@ -742,18 +740,27 @@ def chart_header(title: str, tooltip: str):
 
 
 def render_chart(fig, **kwargs):
-    """Renderiza gráfico Plotly forçando cores escuras nos eixos e sem subtitle."""
-    # Forçar cores escuras nos eixos (após todos os update_layout individuais)
+    """Renderiza gráfico Plotly forçando cores escuras, responsivo e sem subtitle."""
     fig.update_xaxes(
-        title_font=dict(size=12, color="#1A1A1A", family="Inter, Segoe UI, Arial"),
-        tickfont=dict(color="#333333"),
+        title_font=dict(size=11, color="#1A1A1A"),
+        tickfont=dict(size=10, color="#333333"),
+        automargin=True,
     )
     fig.update_yaxes(
-        title_font=dict(size=12, color="#1A1A1A", family="Inter, Segoe UI, Arial"),
-        tickfont=dict(color="#333333"),
+        title_font=dict(size=11, color="#1A1A1A"),
+        tickfont=dict(size=10, color="#333333"),
+        automargin=True,
     )
-    # Remover subtitle/title do Plotly (renderiza "undefined" no Plotly 6)
-    fig.update_layout(title_text="")
+    fig.update_layout(
+        title_text="",
+        autosize=True,
+    )
+    # Responsive config: permite redimensionar + remove botões desnecessários
+    kwargs.setdefault("use_container_width", True)
+    kwargs.setdefault("config", {
+        "responsive": True,
+        "displayModeBar": False,
+    })
     st.plotly_chart(fig, **kwargs)
 
 
@@ -910,10 +917,11 @@ def render_visao_geral(df: pd.DataFrame, df_receitas_raw: pd.DataFrame, filtros_
             hole=0.45,
             textinfo="label+percent",
             textposition="outside",
+            textfont=dict(size=9),
             hovertemplate="<b>%{label}</b><br>Associados: %{value:,.0f}<br>%{percent}<extra></extra>",
         ))
         fig_score = default_layout(fig_score, height=400)
-        fig_score.update_layout(showlegend=False)
+        fig_score.update_layout(showlegend=False, margin=dict(l=20, r=20, t=30, b=30))
         render_chart(fig_score, use_container_width=True)
 
     with col_perfil:
