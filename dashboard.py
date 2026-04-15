@@ -76,6 +76,30 @@ PERFIL_COLORS = {
     "Triste": "#D62728",
 }
 
+NATURALIDADE_REGIOES = {
+    "Catarinense": "Sul",
+    "Gaúcho": "Sul",
+    "Paulista": "Sudeste",
+    "Carioca": "Sudeste",
+    "Capixaba": "Sudeste",
+    "Cearense": "Nordeste",
+    "Alagoano": "Nordeste",
+    "Paraense": "Norte",
+    "Acreano": "Norte",
+    "Mato-grossense": "Centro-Oeste",
+    "Goiano": "Centro-Oeste",
+}
+
+REGIAO_COLORS = {
+    "Sul": "#007D89",
+    "Sudeste": "#165C7D",
+    "Nordeste": "#FFA300",
+    "Norte": "#09AF41",
+    "Centro-Oeste": "#9467BD",
+}
+
+REGIAO_ORDER = ["Sul", "Sudeste", "Centro-Oeste", "Nordeste", "Norte"]
+
 
 # ---------------------------------------------------------------------------
 # Funções utilitarias de formatação
@@ -557,6 +581,7 @@ def load_data():
                 _nat_map[val] = "Gaúcho"
         if _nat_map:
             df_base["naturalidade"] = df_base["naturalidade"].replace(_nat_map)
+        df_base["regiao"] = df_base["naturalidade"].map(NATURALIDADE_REGIOES)
 
     # Produtos (nomes podem vir com encoding quebrado do Excel)
     if "produto" in df_receitas.columns:
@@ -652,6 +677,24 @@ def render_sidebar(df_merged: pd.DataFrame):
             placeholder="Todos os produtos",
         )
 
+        # Naturalidade
+        naturalidades_disponíveis = sorted(df_merged["naturalidade"].dropna().unique().tolist())
+        naturalidade_selecionada = st.multiselect(
+            "Naturalidade",
+            options=naturalidades_disponíveis,
+            default=[],
+            placeholder="Todas as naturalidades",
+        )
+
+        # Regiao
+        regioes_disponíveis = [r for r in REGIAO_ORDER if r in df_merged["regiao"].dropna().unique()]
+        regiao_selecionada = st.multiselect(
+            "Região (derivada)",
+            options=regioes_disponíveis,
+            default=[],
+            placeholder="Todas as regiões",
+        )
+
         st.markdown("---")
 
         # Cenário de interpretação dos dados
@@ -688,8 +731,15 @@ def render_sidebar(df_merged: pd.DataFrame):
         df = df[df["perfil"].isin(perfil_selecionado)]
     if produtos_selecionados:
         df = df[df["produto"].isin(produtos_selecionados)]
+    if naturalidade_selecionada:
+        df = df[df["naturalidade"].isin(naturalidade_selecionada)]
+    if regiao_selecionada:
+        df = df[df["regiao"].isin(regiao_selecionada)]
 
-    filtros_ativos = bool(pa_selecionadas or score_selecionados or perfil_selecionado or produtos_selecionados)
+    filtros_ativos = bool(
+        pa_selecionadas or score_selecionados or perfil_selecionado
+        or produtos_selecionados or naturalidade_selecionada or regiao_selecionada
+    )
     is_media = cenario == "Receita Média (AVG)"
     return df, filtros_ativos, is_media
 
@@ -811,7 +861,15 @@ def render_visao_geral(df: pd.DataFrame, df_receitas_raw: pd.DataFrame, filtros_
         if total_associados > 0 else 0
     )
 
-    # KPIs em 2 linhas de 3 (melhor responsividade que 6 em linha)
+    # Indicadores regionais
+    naturalidades_distintas = df["naturalidade"].dropna().nunique()
+    assoc_sul = df[df["regiao"] == "Sul"]["id_ident"].nunique()
+    pct_sul = assoc_sul / total_associados * 100 if total_associados > 0 else 0
+    nat_lider_series = df.drop_duplicates("id_ident")["naturalidade"].value_counts()
+    nat_lider = nat_lider_series.index[0] if len(nat_lider_series) > 0 else "—"
+    pct_lider = nat_lider_series.iloc[0] / total_associados * 100 if total_associados > 0 and len(nat_lider_series) > 0 else 0
+
+    # KPIs em 3 linhas de 3
     c1, c2, c3 = st.columns(3)
     c1.metric("Total Associados", fmt_num(total_associados))
     c2.metric(lbl(is_media, 'receita_total'), fmt_brl(receita_total))
@@ -820,6 +878,10 @@ def render_visao_geral(df: pd.DataFrame, df_receitas_raw: pd.DataFrame, filtros_
     c4.metric("PAs Ativas", fmt_num(total_pas))
     c5.metric("Produtos", fmt_num(total_produtos))
     c6.metric("% Perfil Triste", fmt_pct(pct_triste))
+    c7, c8, c9 = st.columns(3)
+    c7.metric("Naturalidades Distintas", fmt_num(naturalidades_distintas))
+    c8.metric("% Região Sul", fmt_pct(pct_sul), help="Catarinenses + Gaúchos sobre o total de associados — alinhado à identidade regional da cooperativa.")
+    c9.metric(f"Naturalidade Líder", f"{nat_lider} ({fmt_pct(pct_lider)})")
 
     st.markdown("---")
 
@@ -1166,6 +1228,283 @@ def render_concentração(df: pd.DataFrame, is_media: bool = False):
 
 
 # ---------------------------------------------------------------------------
+# Tab - Perfil Demográfico (Naturalidade)
+# ---------------------------------------------------------------------------
+def render_perfil_demografico(df: pd.DataFrame, is_media: bool = False):
+    """Renderiza a aba de Perfil Demográfico por naturalidade / região."""
+
+    st.markdown("### \U0001f30e Perfil Demográfico por Naturalidade")
+    st.caption(
+        "Distribuição de associados, receita e comportamento por naturalidade "
+        "(11 grupos) e região de origem — identifica concentração, dependência "
+        "regional e oportunidades de cross-sell segmentado."
+    )
+
+    if df["naturalidade"].dropna().empty:
+        st.warning("Não há dados de naturalidade para os filtros aplicados.")
+        return
+
+    # --- KPIs ---
+    total_assoc = df["id_ident"].nunique()
+    nat_stats = (
+        df.groupby("naturalidade", observed=False)
+        .agg(
+            associados=("id_ident", "nunique"),
+            receita=("vlreceita", "sum"),
+        )
+        .reset_index()
+        .sort_values("receita", ascending=False)
+    )
+    nat_stats["ticket"] = nat_stats["receita"] / nat_stats["associados"].replace(0, np.nan)
+    nat_stats["pct_assoc"] = nat_stats["associados"] / nat_stats["associados"].sum() * 100
+    nat_stats["pct_receita"] = nat_stats["receita"] / nat_stats["receita"].sum() * 100
+
+    top_nat = nat_stats.iloc[0]
+    top_ticket_row = nat_stats.loc[nat_stats["ticket"].idxmax()]
+    pct_top2 = nat_stats["pct_receita"].nlargest(2).sum()
+
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Naturalidades Distintas", fmt_num(nat_stats.shape[0]))
+    c2.metric(
+        "Naturalidade com Maior Receita",
+        f"{top_nat['naturalidade']}",
+        f"{fmt_pct(top_nat['pct_receita'])} da receita",
+    )
+    c3.metric(
+        "Maior Ticket Médio",
+        f"{top_ticket_row['naturalidade']}",
+        fmt_brl(top_ticket_row["ticket"]),
+    )
+    c4.metric(
+        "Concentração Top 2",
+        fmt_pct(pct_top2),
+        help="% da receita concentrada nas 2 naturalidades principais.",
+    )
+
+    st.markdown("---")
+
+    # --- Treemap + Barra ticket ---
+    col_tree, col_tk = st.columns(2)
+
+    with col_tree:
+        chart_header(
+            f"{lbl(is_media, 'receita')} por Naturalidade (Treemap)",
+            "Área proporcional à receita total gerada por cada naturalidade. "
+            "Grupos maiores indicam dependência de receita.",
+        )
+        fig_tree = go.Figure(go.Treemap(
+            labels=nat_stats["naturalidade"],
+            parents=[""] * len(nat_stats),
+            values=nat_stats["receita"].clip(lower=0),
+            text=[
+                f"{fmt_brl(r)}<br>{fmt_num(a)} assoc.<br>{fmt_pct(p)}"
+                for r, a, p in zip(nat_stats["receita"], nat_stats["associados"], nat_stats["pct_receita"])
+            ],
+            textinfo="label+text",
+            marker=dict(
+                colors=nat_stats["receita"],
+                colorscale="Teal",
+                line=dict(width=1, color="white"),
+            ),
+            hovertemplate="<b>%{label}</b><br>Receita: %{value:,.0f}<extra></extra>",
+        ))
+        fig_tree = default_layout(fig_tree, height=420, showlegend=False)
+        render_chart(fig_tree, use_container_width=True)
+
+    with col_tk:
+        chart_header(
+            "Ticket Médio por Naturalidade",
+            "Receita média por associado em cada grupo. Valores altos mesmo em grupos "
+            "pequenos indicam nichos premium para expansão.",
+        )
+        tk = nat_stats.sort_values("ticket", ascending=True)
+        fig_tk = go.Figure(go.Bar(
+            x=tk["ticket"],
+            y=tk["naturalidade"],
+            orientation="h",
+            marker_color=COLORS["primary"],
+            text=[fmt_brl(v) for v in tk["ticket"]],
+            textposition="outside",
+            hovertemplate="<b>%{y}</b><br>Ticket: R$ %{x:,.0f}<extra></extra>",
+        ))
+        fig_tk = default_layout(fig_tk, height=420, showlegend=False)
+        fig_tk.update_layout(
+            xaxis_title="Ticket médio (R$)",
+            yaxis_title=None,
+            xaxis_tickformat=",.0f",
+            xaxis_tickprefix="R$ ",
+        )
+        render_chart(fig_tk, use_container_width=True)
+
+    st.markdown("---")
+
+    # --- Região + Perfil x Naturalidade ---
+    col_reg, col_perf = st.columns(2)
+
+    with col_reg:
+        chart_header(
+            f"{lbl(is_media, 'receita')} por Região",
+            "Agrupamento das 11 naturalidades por região do Brasil. Mostra se a cooperativa "
+            "é realmente regionalizada ou se a base é mais distribuída do que parece.",
+        )
+        reg_stats = (
+            df.dropna(subset=["regiao"])
+            .groupby("regiao", observed=False)
+            .agg(
+                associados=("id_ident", "nunique"),
+                receita=("vlreceita", "sum"),
+            )
+            .reset_index()
+        )
+        reg_stats["regiao"] = pd.Categorical(reg_stats["regiao"], categories=REGIAO_ORDER, ordered=True)
+        reg_stats = reg_stats.sort_values("regiao")
+
+        fig_reg = go.Figure(go.Bar(
+            x=reg_stats["regiao"].astype(str),
+            y=reg_stats["receita"],
+            marker_color=[REGIAO_COLORS.get(r, COLORS["neutral"]) for r in reg_stats["regiao"].astype(str)],
+            text=[
+                f"{fmt_brl(r)}<br>{fmt_num(a)} assoc."
+                for r, a in zip(reg_stats["receita"], reg_stats["associados"])
+            ],
+            textposition="outside",
+            hovertemplate="<b>%{x}</b><br>Receita: R$ %{y:,.0f}<extra></extra>",
+        ))
+        fig_reg = default_layout(fig_reg, height=400, showlegend=False)
+        fig_reg.update_layout(
+            yaxis_title=lbl(is_media, "eixo"),
+            yaxis_tickformat=",.0f",
+            yaxis_tickprefix="R$ ",
+        )
+        render_chart(fig_reg, use_container_width=True)
+
+    with col_perf:
+        chart_header(
+            "% Perfil 'Triste' por Naturalidade",
+            "Percentual de associados Triste em cada grupo. Revela se a insatisfação "
+            "tem recorte regional — útil para direcionar ações de relacionamento.",
+        )
+        perfil_nat = (
+            df.drop_duplicates("id_ident")
+            .groupby("naturalidade", observed=False)["perfil"]
+            .value_counts(normalize=True)
+            .mul(100)
+            .rename("pct")
+            .reset_index()
+        )
+        triste_nat = perfil_nat[perfil_nat["perfil"] == "Triste"].copy()
+        triste_nat = triste_nat.sort_values("pct", ascending=True)
+
+        fig_tr = go.Figure(go.Bar(
+            x=triste_nat["pct"],
+            y=triste_nat["naturalidade"],
+            orientation="h",
+            marker_color=[
+                COLORS["negative"] if v > triste_nat["pct"].median() else COLORS["primary_light"]
+                for v in triste_nat["pct"]
+            ],
+            text=[fmt_pct(v) for v in triste_nat["pct"]],
+            textposition="outside",
+            hovertemplate="<b>%{y}</b><br>%{x:.1f}% Triste<extra></extra>",
+        ))
+        fig_tr = default_layout(fig_tr, height=400, showlegend=False)
+        fig_tr.update_layout(
+            xaxis_title="% Perfil Triste",
+            yaxis_title=None,
+        )
+        render_chart(fig_tr, use_container_width=True)
+
+    st.markdown("---")
+
+    # --- Top Produto por Naturalidade ---
+    chart_header(
+        f"{lbl(is_media, 'receita')} por Naturalidade x Produto",
+        "Heatmap que mostra qual produto concentra mais receita em cada naturalidade. "
+        "Células fortes fora da diagonal indicam oportunidades de cross-sell regional "
+        "(ex.: produto que vende bem no Sul mas é subutilizado no Nordeste).",
+    )
+    nat_prod = (
+        df.groupby(["naturalidade", "produto"], observed=False)["vlreceita"]
+        .sum()
+        .reset_index()
+    )
+    nat_prod_pivot = nat_prod.pivot_table(
+        index="naturalidade", columns="produto", values="vlreceita", fill_value=0,
+    )
+    # Ordenar naturalidades por receita total
+    ordem_nat = nat_stats.sort_values("receita", ascending=False)["naturalidade"].tolist()
+    nat_prod_pivot = nat_prod_pivot.reindex([n for n in ordem_nat if n in nat_prod_pivot.index])
+
+    text_vals = [[fmt_brl(v) for v in row] for row in nat_prod_pivot.values]
+
+    fig_np = go.Figure(go.Heatmap(
+        z=nat_prod_pivot.values,
+        x=nat_prod_pivot.columns.tolist(),
+        y=nat_prod_pivot.index.tolist(),
+        text=text_vals,
+        texttemplate="%{text}",
+        textfont=dict(size=9),
+        colorscale=[[0, "#FFFFFF"], [0.1, "#CFE8EC"], [0.5, "#4DA8B3"], [1, "#007D89"]],
+        hovertemplate="<b>%{y}</b> | %{x}<br>Receita: %{text}<extra></extra>",
+        showscale=True,
+        colorbar=dict(title="Receita"),
+    ))
+    fig_np = default_layout(fig_np, height=480, showlegend=False)
+    fig_np.update_layout(
+        xaxis_title="Produto",
+        yaxis_title=None,
+        xaxis_tickangle=-30,
+    )
+    render_chart(fig_np, use_container_width=True)
+
+    st.markdown("---")
+
+    # --- Tabela consolidada ---
+    with st.expander("Ver tabela detalhada por Naturalidade"):
+        display_nat = pd.DataFrame({
+            "Naturalidade": nat_stats["naturalidade"],
+            "Região": nat_stats["naturalidade"].map(NATURALIDADE_REGIOES).fillna("—"),
+            "Associados": nat_stats["associados"].apply(fmt_num),
+            "% Associados": nat_stats["pct_assoc"].apply(fmt_pct),
+            "Receita Total": nat_stats["receita"].apply(fmt_brl),
+            "% Receita": nat_stats["pct_receita"].apply(fmt_pct),
+            "Ticket Médio": nat_stats["ticket"].apply(fmt_brl),
+        })
+        st.dataframe(display_nat, use_container_width=True, hide_index=True)
+
+    # --- Insights ---
+    col_i1, col_i2 = st.columns(2)
+
+    with col_i1:
+        # Top 2 concentração
+        top2_names = nat_stats.head(2)["naturalidade"].tolist()
+        st.markdown(
+            f'<div class="insight-box">'
+            f'<div class="card-title">\U0001f4a1 Concentração Regional</div>'
+            f'<b>{top2_names[0]}</b> e <b>{top2_names[1]}</b> concentram '
+            f'<b>{fmt_pct(pct_top2)}</b> de toda a receita. '
+            f'Dependência regional elevada reforça a necessidade de estratégias '
+            f'defensivas (retenção nesses grupos) e expansão (diversificação em outras regiões).'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
+
+    with col_i2:
+        # Triste alto
+        if not triste_nat.empty:
+            pior_triste = triste_nat.iloc[-1]
+            st.markdown(
+                f'<div class="alert-box">'
+                f'<div class="card-title-alert">\u26a0 Insatisfação com Recorte Regional</div>'
+                f'<b>{pior_triste["naturalidade"]}</b> lidera o percentual de perfil "Triste" '
+                f'({fmt_pct(pior_triste["pct"])}). Investigar se há fatores operacionais '
+                f'específicos (PA, produtos disponíveis) influenciando esse grupo.'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
+
+
+# ---------------------------------------------------------------------------
 # Tab 3 - Análise de Risco
 # ---------------------------------------------------------------------------
 def render_risco(df: pd.DataFrame, is_media: bool = False):
@@ -1339,6 +1678,75 @@ def render_risco(df: pd.DataFrame, is_media: bool = False):
             unsafe_allow_html=True,
         )
 
+    # --- Risco x Naturalidade ---
+    if df["naturalidade"].dropna().empty:
+        return
+
+    st.markdown("---")
+    chart_header(
+        "Score de Risco x Naturalidade",
+        "Percentual de associados em cada score dentro de cada naturalidade. "
+        "Barras claramente mais vermelhas indicam naturalidades com exposição de risco "
+        "acima da média — útil para direcionar políticas de crédito regionalizadas.",
+    )
+
+    nat_score = (
+        df.drop_duplicates("id_ident")
+        .dropna(subset=["naturalidade", "score"])
+        .groupby(["naturalidade", "score"], observed=False)["id_ident"]
+        .nunique()
+        .reset_index()
+        .rename(columns={"id_ident": "qtd"})
+    )
+    nat_totais = nat_score.groupby("naturalidade")["qtd"].sum().rename("total")
+    nat_score = nat_score.merge(nat_totais, on="naturalidade")
+    nat_score["pct"] = nat_score["qtd"] / nat_score["total"] * 100
+
+    # Ordenar naturalidades por volume
+    ordem = nat_totais.sort_values(ascending=False).index.tolist()
+
+    score_order_local = [
+        "BAIXÍSSIMO RISCO", "BAIXO RISCO", "MÉDIO RISCO 1",
+        "MÉDIO RISCO 2", "ALTÍSSIMO RISCO", "SEM CLASSIFICAÇÃO",
+    ]
+
+    fig_ns = go.Figure()
+    for score in score_order_local:
+        sub = nat_score[nat_score["score"] == score]
+        if sub.empty:
+            continue
+        sub = sub.set_index("naturalidade").reindex(ordem).reset_index()
+        fig_ns.add_trace(go.Bar(
+            name=score,
+            x=sub["naturalidade"],
+            y=sub["pct"],
+            marker_color=SCORE_COLORS.get(score, COLORS["neutral"]),
+            hovertemplate=f"<b>%{{x}}</b><br>{score}: %{{y:.1f}}%<extra></extra>",
+        ))
+    fig_ns = default_layout(fig_ns, height=420)
+    fig_ns.update_layout(
+        barmode="stack",
+        yaxis_title="% de associados",
+        yaxis_ticksuffix="%",
+        xaxis_tickangle=-30,
+        legend_title=None,
+    )
+    render_chart(fig_ns, use_container_width=True)
+
+    # Alerta de naturalidade com maior altíssimo risco
+    alto_risco = nat_score[nat_score["score"] == "ALTÍSSIMO RISCO"].sort_values("pct", ascending=False)
+    if not alto_risco.empty and alto_risco.iloc[0]["pct"] > 0:
+        pior = alto_risco.iloc[0]
+        st.markdown(
+            f'<div class="alert-box">'
+            f'<div class="card-title-alert">\u26a0 Naturalidade com Maior Exposição</div>'
+            f'<b>{pior["naturalidade"]}</b> concentra <b>{fmt_pct(pior["pct"])}</b> de '
+            f'associados em "ALTÍSSIMO RISCO" — o maior entre os 11 grupos. '
+            f'Avaliar revisão de política de crédito para esse segmento.'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
+
 
 # ---------------------------------------------------------------------------
 # Tab 4 - Análise por PA
@@ -1459,6 +1867,93 @@ def render_pa(df: pd.DataFrame, is_media: bool = False):
         render_chart(fig_scatter, use_container_width=True)
 
     st.markdown("---")
+
+    # --- Heatmap PA x Naturalidade (Top PAs) ---
+    if not df["naturalidade"].dropna().empty:
+        chart_header(
+            "Top 15 PAs x Naturalidade (% de associados)",
+            "Participação de cada naturalidade na composição da PA. "
+            "Células fortes fora da naturalidade dominante revelam PAs atípicas — "
+            "possível migração interna ou segmento específico que vale investigação.",
+        )
+
+        top15_pas = pa_stats.head(15)["pa"].tolist()
+        pa_nat = (
+            df[df["pa"].isin(top15_pas)]
+            .drop_duplicates("id_ident")
+            .dropna(subset=["naturalidade", "pa"])
+            .groupby(["pa", "naturalidade"], observed=False)["id_ident"]
+            .nunique()
+            .reset_index()
+            .rename(columns={"id_ident": "qtd"})
+        )
+        pa_totais = pa_nat.groupby("pa")["qtd"].sum().rename("total")
+        pa_nat = pa_nat.merge(pa_totais, on="pa")
+        pa_nat["pct"] = pa_nat["qtd"] / pa_nat["total"] * 100
+
+        pivot_pn = pa_nat.pivot_table(
+            index="pa", columns="naturalidade", values="pct", fill_value=0,
+        ).reindex(top15_pas)
+
+        # Ordenar colunas (naturalidades) pelo volume total
+        ordem_cols = (
+            df.drop_duplicates("id_ident")["naturalidade"]
+            .value_counts()
+            .index.tolist()
+        )
+        ordem_cols = [c for c in ordem_cols if c in pivot_pn.columns]
+        pivot_pn = pivot_pn[ordem_cols]
+
+        text_pn = [[f"{v:.0f}%" if v > 0 else "" for v in row] for row in pivot_pn.values]
+
+        fig_pn = go.Figure(go.Heatmap(
+            z=pivot_pn.values,
+            x=pivot_pn.columns.tolist(),
+            y=pivot_pn.index.tolist(),
+            text=text_pn,
+            texttemplate="%{text}",
+            textfont=dict(size=10),
+            colorscale=[[0, "#FFFFFF"], [0.1, "#CFE8EC"], [0.5, "#4DA8B3"], [1, "#007D89"]],
+            hovertemplate="<b>PA %{y}</b> | %{x}<br>%{z:.1f}%<extra></extra>",
+            showscale=True,
+            colorbar=dict(title="% na PA"),
+        ))
+        fig_pn = default_layout(fig_pn, height=500, showlegend=False)
+        fig_pn.update_layout(
+            xaxis_title="Naturalidade",
+            yaxis_title="PA",
+            yaxis_autorange="reversed",
+            xaxis_tickangle=-30,
+        )
+        render_chart(fig_pn, use_container_width=True)
+
+        # Detectar PAs atípicas (naturalidade dominante diferente da global)
+        nat_dominante_global = (
+            df.drop_duplicates("id_ident")["naturalidade"].value_counts().index[0]
+            if not df["naturalidade"].dropna().empty else None
+        )
+        if nat_dominante_global is not None:
+            pa_dominante = pivot_pn.idxmax(axis=1)
+            atipicas = pa_dominante[pa_dominante != nat_dominante_global]
+            if not atipicas.empty:
+                items_at = "".join(
+                    f"<li><b>PA {pa}</b>: dominada por <b>{nat}</b> "
+                    f"({pivot_pn.loc[pa, nat]:.0f}%)</li>"
+                    for pa, nat in atipicas.items()
+                )
+                st.markdown(
+                    f'<div class="insight-box">'
+                    f'<div class="card-title">\U0001f50e PAs com Composição Atípica</div>'
+                    f'A naturalidade dominante na cooperativa é <b>{nat_dominante_global}</b>. '
+                    f'As PAs abaixo têm outro grupo majoritário:'
+                    f'<ul>{items_at}</ul>'
+                    f'Podem indicar migração regional, agências em fronteira ou '
+                    f'oportunidades específicas de segmentação.'
+                    f'</div>',
+                    unsafe_allow_html=True,
+                )
+
+        st.markdown("---")
 
     # --- Tabela completa ---
     with st.expander("Ver tabela completa de PAs"):
@@ -2262,9 +2757,10 @@ def main():
         )
 
     # Tabs
-    tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
+    tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs([
         "\U0001f4c8 Visão Geral",
         "\U0001f4b0 Concentração de Receita",
+        "\U0001f30e Perfil Demográfico",
         "\U0001f6e1 Análise de Risco",
         "\U0001f3e6 Análise por PA",
         "\U0001f3af Oportunidades & Alertas",
@@ -2279,18 +2775,21 @@ def main():
         render_concentração(df_filtered, is_media)
 
     with tab3:
-        render_risco(df_filtered, is_media)
+        render_perfil_demografico(df_filtered, is_media)
 
     with tab4:
-        render_pa(df_filtered, is_media)
+        render_risco(df_filtered, is_media)
 
     with tab5:
-        render_oportunidades(df_filtered, df_receitas, is_media)
+        render_pa(df_filtered, is_media)
 
     with tab6:
-        render_dados_excluidos(df_receitas, df_base)
+        render_oportunidades(df_filtered, df_receitas, is_media)
 
     with tab7:
+        render_dados_excluidos(df_receitas, df_base)
+
+    with tab8:
         render_qualidade(df_base, df_receitas, df_merged)
 
 
