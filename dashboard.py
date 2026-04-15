@@ -842,7 +842,7 @@ def render_chart(fig, **kwargs):
 # ---------------------------------------------------------------------------
 # Tab 1 - Visão Geral
 # ---------------------------------------------------------------------------
-def render_visao_geral(df: pd.DataFrame, df_receitas_raw: pd.DataFrame, filtros_ativos: bool, is_media: bool = False):
+def render_visao_geral(df: pd.DataFrame, df_receitas_raw: pd.DataFrame, df_base: pd.DataFrame, filtros_ativos: bool, is_media: bool = False):
     """Renderiza a aba Visão Geral."""
 
     st.markdown("### \U0001f4c8 Visão Geral da Cooperativa")
@@ -862,7 +862,8 @@ def render_visao_geral(df: pd.DataFrame, df_receitas_raw: pd.DataFrame, filtros_
     )
 
     # Indicadores regionais
-    naturalidades_distintas = df["naturalidade"].dropna().nunique()
+    nat_ativas = df["naturalidade"].dropna().nunique()
+    nat_cadastradas = df_base["naturalidade"].dropna().nunique()
     assoc_sul = df[df["regiao"] == "Sul"]["id_ident"].nunique()
     pct_sul = assoc_sul / total_associados * 100 if total_associados > 0 else 0
     nat_lider_series = df.drop_duplicates("id_ident")["naturalidade"].value_counts()
@@ -879,7 +880,15 @@ def render_visao_geral(df: pd.DataFrame, df_receitas_raw: pd.DataFrame, filtros_
     c5.metric("Produtos", fmt_num(total_produtos))
     c6.metric("% Perfil Triste", fmt_pct(pct_triste))
     c7, c8, c9 = st.columns(3)
-    c7.metric("Naturalidades Distintas", fmt_num(naturalidades_distintas))
+    c7.metric(
+        "Naturalidades",
+        f"{fmt_num(nat_ativas)} ativas / {fmt_num(nat_cadastradas)} cadastradas",
+        help=(
+            "Ativas = com ao menos 1 registro de receita nos 6 meses. "
+            "Cadastradas = total na base de associados. A diferença revela "
+            "grupos inativos em receita."
+        ),
+    )
     c8.metric("% Região Sul", fmt_pct(pct_sul), help="Catarinenses + Gaúchos sobre o total de associados — alinhado à identidade regional da cooperativa.")
     c9.metric(f"Naturalidade Líder", f"{nat_lider} ({fmt_pct(pct_lider)})")
 
@@ -1230,7 +1239,7 @@ def render_concentração(df: pd.DataFrame, is_media: bool = False):
 # ---------------------------------------------------------------------------
 # Tab - Perfil Demográfico (Naturalidade)
 # ---------------------------------------------------------------------------
-def render_perfil_demografico(df: pd.DataFrame, is_media: bool = False):
+def render_perfil_demografico(df: pd.DataFrame, df_base: pd.DataFrame, is_media: bool = False):
     """Renderiza a aba de Perfil Demográfico por naturalidade / região."""
 
     st.markdown("### \U0001f30e Perfil Demográfico por Naturalidade")
@@ -1243,6 +1252,31 @@ def render_perfil_demografico(df: pd.DataFrame, is_media: bool = False):
     if df["naturalidade"].dropna().empty:
         st.warning("Não há dados de naturalidade para os filtros aplicados.")
         return
+
+    # --- Alerta naturalidades cadastradas mas sem receita ---
+    nat_cadastradas = set(df_base["naturalidade"].dropna().unique())
+    nat_ativas = set(df["naturalidade"].dropna().unique())
+    nat_inativas = nat_cadastradas - nat_ativas
+    if nat_inativas:
+        itens_inat = []
+        for nat in sorted(nat_inativas):
+            qtd = (df_base["naturalidade"] == nat).sum()
+            itens_inat.append(
+                f"<li><b>{nat}</b>: {fmt_num(qtd)} associados cadastrados, "
+                f"0 registros de receita nos 6 meses</li>"
+            )
+        st.markdown(
+            f'<div class="alert-box">'
+            f'<div class="card-title-alert">\u26a0 Naturalidades Cadastradas Sem Receita</div>'
+            f'Das <b>{fmt_num(len(nat_cadastradas))}</b> naturalidades cadastradas na base, '
+            f'<b>{fmt_num(len(nat_ativas))}</b> geraram receita no período. '
+            f'Os grupos abaixo estão 100% inativos:<br>'
+            f'<ul>{"".join(itens_inat)}</ul>'
+            f'<b>Recomendação:</b> Investigar se são churn silencioso, associados '
+            f'inadimplentes ou oportunidades para campanha de ativação direcionada.'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
 
     # --- KPIs ---
     total_assoc = df["id_ident"].nunique()
@@ -2769,13 +2803,13 @@ def main():
     ])
 
     with tab1:
-        render_visao_geral(df_filtered, df_receitas, filtros_ativos, is_media)
+        render_visao_geral(df_filtered, df_receitas, df_base, filtros_ativos, is_media)
 
     with tab2:
         render_concentração(df_filtered, is_media)
 
     with tab3:
-        render_perfil_demografico(df_filtered, is_media)
+        render_perfil_demografico(df_filtered, df_base, is_media)
 
     with tab4:
         render_risco(df_filtered, is_media)
