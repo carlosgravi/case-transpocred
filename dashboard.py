@@ -1352,6 +1352,7 @@ def render_perfil_demografico(df: pd.DataFrame, df_base: pd.DataFrame, is_media:
             "pequenos indicam nichos premium para expansão.",
         )
         tk = nat_stats.sort_values("ticket", ascending=True)
+        max_tk = tk["ticket"].max() if not tk.empty else 0
         fig_tk = go.Figure(go.Bar(
             x=tk["ticket"],
             y=tk["naturalidade"],
@@ -1359,6 +1360,7 @@ def render_perfil_demografico(df: pd.DataFrame, df_base: pd.DataFrame, is_media:
             marker_color=COLORS["primary"],
             text=[fmt_brl(v) for v in tk["ticket"]],
             textposition="outside",
+            cliponaxis=False,
             hovertemplate="<b>%{y}</b><br>Ticket: R$ %{x:,.0f}<extra></extra>",
         ))
         fig_tk = default_layout(fig_tk, height=420, showlegend=False)
@@ -1367,6 +1369,8 @@ def render_perfil_demografico(df: pd.DataFrame, df_base: pd.DataFrame, is_media:
             yaxis_title=None,
             xaxis_tickformat=",.0f",
             xaxis_tickprefix="R$ ",
+            xaxis=dict(range=[0, max_tk * 1.22]) if max_tk else None,
+            margin=dict(l=50, r=60, t=30, b=50),
         )
         render_chart(fig_tk, use_container_width=True)
 
@@ -1393,6 +1397,7 @@ def render_perfil_demografico(df: pd.DataFrame, df_base: pd.DataFrame, is_media:
         reg_stats["regiao"] = pd.Categorical(reg_stats["regiao"], categories=REGIAO_ORDER, ordered=True)
         reg_stats = reg_stats.sort_values("regiao")
 
+        max_reg = reg_stats["receita"].max() if not reg_stats.empty else 0
         fig_reg = go.Figure(go.Bar(
             x=reg_stats["regiao"].astype(str),
             y=reg_stats["receita"],
@@ -1402,6 +1407,7 @@ def render_perfil_demografico(df: pd.DataFrame, df_base: pd.DataFrame, is_media:
                 for r, a in zip(reg_stats["receita"], reg_stats["associados"])
             ],
             textposition="outside",
+            cliponaxis=False,
             hovertemplate="<b>%{x}</b><br>Receita: R$ %{y:,.0f}<extra></extra>",
         ))
         fig_reg = default_layout(fig_reg, height=400, showlegend=False)
@@ -1409,44 +1415,52 @@ def render_perfil_demografico(df: pd.DataFrame, df_base: pd.DataFrame, is_media:
             yaxis_title=lbl(is_media, "eixo"),
             yaxis_tickformat=",.0f",
             yaxis_tickprefix="R$ ",
+            yaxis=dict(range=[0, max_reg * 1.22]) if max_reg else None,
+            margin=dict(l=60, r=30, t=50, b=50),
         )
         render_chart(fig_reg, use_container_width=True)
 
     with col_perf:
         chart_header(
-            "% Perfil 'Triste' por Naturalidade",
-            "Percentual de associados Triste em cada grupo. Revela se a insatisfação "
-            "tem recorte regional — útil para direcionar ações de relacionamento.",
+            "Associados por Naturalidade e Perfil",
+            "Quantidade de associados em cada naturalidade, com cor indicando o perfil "
+            "predominante. Nesta base, perfil e naturalidade são 100% correlacionados — "
+            "cada grupo tem um único perfil, o que é uma característica do dado sintético "
+            "e deve ser considerado nas análises.",
         )
-        perfil_nat = (
+        perfil_por_nat = (
             df.drop_duplicates("id_ident")
-            .groupby("naturalidade", observed=False)["perfil"]
-            .value_counts(normalize=True)
-            .mul(100)
-            .rename("pct")
+            .dropna(subset=["naturalidade", "perfil"])
+            .groupby(["naturalidade", "perfil"], observed=False)["id_ident"]
+            .nunique()
             .reset_index()
+            .rename(columns={"id_ident": "qtd"})
         )
-        triste_nat = perfil_nat[perfil_nat["perfil"] == "Triste"].copy()
-        triste_nat = triste_nat.sort_values("pct", ascending=True)
+        perfil_por_nat = perfil_por_nat[perfil_por_nat["qtd"] > 0]
+        perfil_por_nat = perfil_por_nat.sort_values("qtd", ascending=True)
 
-        fig_tr = go.Figure(go.Bar(
-            x=triste_nat["pct"],
-            y=triste_nat["naturalidade"],
+        fig_pn2 = go.Figure(go.Bar(
+            x=perfil_por_nat["qtd"],
+            y=perfil_por_nat["naturalidade"],
             orientation="h",
-            marker_color=[
-                COLORS["negative"] if v > triste_nat["pct"].median() else COLORS["primary_light"]
-                for v in triste_nat["pct"]
+            marker_color=[PERFIL_COLORS.get(p, COLORS["neutral"]) for p in perfil_por_nat["perfil"]],
+            text=[
+                f"{fmt_num(q)} · {p}"
+                for q, p in zip(perfil_por_nat["qtd"], perfil_por_nat["perfil"])
             ],
-            text=[fmt_pct(v) for v in triste_nat["pct"]],
             textposition="outside",
-            hovertemplate="<b>%{y}</b><br>%{x:.1f}% Triste<extra></extra>",
+            cliponaxis=False,
+            hovertemplate="<b>%{y}</b><br>%{x:,.0f} associados<extra></extra>",
         ))
-        fig_tr = default_layout(fig_tr, height=400, showlegend=False)
-        fig_tr.update_layout(
-            xaxis_title="% Perfil Triste",
+        fig_pn2 = default_layout(fig_pn2, height=400, showlegend=False)
+        max_qtd = perfil_por_nat["qtd"].max() if not perfil_por_nat.empty else 0
+        fig_pn2.update_layout(
+            xaxis_title="Associados",
             yaxis_title=None,
+            xaxis=dict(range=[0, max_qtd * 1.25]) if max_qtd else None,
+            margin=dict(l=50, r=60, t=30, b=50),
         )
-        render_chart(fig_tr, use_container_width=True)
+        render_chart(fig_pn2, use_container_width=True)
 
     st.markdown("---")
 
@@ -1524,15 +1538,36 @@ def render_perfil_demografico(df: pd.DataFrame, df_base: pd.DataFrame, is_media:
         )
 
     with col_i2:
-        # Triste alto
-        if not triste_nat.empty:
-            pior_triste = triste_nat.iloc[-1]
+        # Correlacao 1:1 entre perfil e naturalidade
+        perfil_uniq = (
+            df.drop_duplicates("id_ident")
+            .dropna(subset=["naturalidade", "perfil"])
+            .groupby("naturalidade")["perfil"]
+            .nunique()
+        )
+        correlacao_total = (perfil_uniq == 1).all() and not perfil_uniq.empty
+        if correlacao_total:
+            grupos_triste = sorted(
+                df.drop_duplicates("id_ident")
+                .loc[lambda d: d["perfil"] == "Triste", "naturalidade"]
+                .dropna()
+                .unique()
+            )
+            grupos_alegre = sorted(
+                df.drop_duplicates("id_ident")
+                .loc[lambda d: d["perfil"] == "Alegre", "naturalidade"]
+                .dropna()
+                .unique()
+            )
             st.markdown(
                 f'<div class="alert-box">'
-                f'<div class="card-title-alert">\u26a0 Insatisfação com Recorte Regional</div>'
-                f'<b>{pior_triste["naturalidade"]}</b> lidera o percentual de perfil "Triste" '
-                f'({fmt_pct(pior_triste["pct"])}). Investigar se há fatores operacionais '
-                f'específicos (PA, produtos disponíveis) influenciando esse grupo.'
+                f'<div class="card-title-alert">\u26a0 Perfil é Determinístico da Naturalidade</div>'
+                f'Cada naturalidade tem <b>um único perfil</b> associado — a variável '
+                f'"perfil" é redundante com "naturalidade" nesta base.<br><br>'
+                f'<b>Triste:</b> {", ".join(grupos_triste) or "—"}<br>'
+                f'<b>Alegre:</b> {", ".join(grupos_alegre) or "—"}<br><br>'
+                f'Em um modelo preditivo real, isso indicaria <i>data leakage</i> '
+                f'ou que o perfil foi gerado sinteticamente a partir da naturalidade.'
                 f'</div>',
                 unsafe_allow_html=True,
             )
