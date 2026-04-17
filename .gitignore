@@ -1,1 +1,19 @@
 __pycache__/
+*.pyc
+
+# Credenciais e segredos
+.env
+.env.*
+*.p8
+*.pem
+rsa_key*
+config_snowflake.ini
+.streamlit/secrets.toml
+credentials*.json
+serviceAccountKey*.json
+token.json
+
+# IDE
+.idea/
+.vscode/
+*.swp
